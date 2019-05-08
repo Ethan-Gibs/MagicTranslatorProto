@@ -4,7 +4,7 @@ import argparse
 import math
 parser = argparse.ArgumentParser(description='Use this script to run TensorFlow implementation (https://github.com/argman/EAST) of EAST: An Efficient and Accurate Scene Text Detector (https://arxiv.org/abs/1704.03155v2)')
 parser.add_argument('--input', help='Path to input image.', required=True)
-parser.add_argument('--model', default="frozen_east_text_detection.pb",
+parser.add_argument('--model', default="models/frozen_east_text_detection.pb",
 					help='Path to a binary .pb file of the model containing trained weights.')
 parser.add_argument('--width', type=int, default=320,
 					help='Preprocess input image by resizing to a specific width. It should be a multiple of 32.')
@@ -57,48 +57,24 @@ def decode(scores, geometry, scoreThresh):
 
 	# Return detections and confidences
 	return [detections, confidences]
-def detectAndCropText(img, confThreshold, nmsThreshold, inpWidth, inpHeight, net):
-	#get height and width
-	#reduce height to 1/3 of original
-	height_ = int(img.shape[0]/3)
-	width_ = img.shape[1]
-	#crop to only top 1/3 of image
-	img = img[:height_]
-
-	#scaling factors for later resizing
-	rW = width_/float(inpWidth)
-	rH = height_/float(inpHeight)
-def showImage(img):
-	cv2.imshow("img", img)
-	cv2.waitKey(0)
-def main():
-	#store arguements
-	img_name = args.input
-	confThreshold = args.thr
-	nmsThreshold = args.nms
-	inpWidth = args.width
-	inpHeight = args.height
-	model = args.model
-
-	#load model
-	net = cv2.dnn.readNet(model)
+def detectAndCropText(img_orig, confThreshold, nmsThreshold, inpWidth, inpHeight, net):
+	img = img_orig.copy()
 
 	outnames = ["feature_fusion/Conv_7/Sigmoid",
 				"feature_fusion/concat_3"]
-	#read image
-	img = cv2.imread(img_name)
 
 	#get height and width
 	#reduce height to 1/3 of original
-	height_ = int(img.shape[0]/3)
+	height_ = int(img.shape[0]/2)
 	width_ = img.shape[1]
 	#crop to only top 1/3 of image
 	img = img[:height_]
-
+	showImage(img)
 	#scaling factors for later resizing
 	rW = width_/float(inpWidth)
 	rH = height_/float(inpHeight)
 
+	#image blobification and input
 	blob = cv2.dnn.blobFromImage(img, 1.0, (inpWidth, inpHeight), 
 								(123.68, 116.78, 103.94), True, False)
 	net.setInput(blob)
@@ -131,15 +107,36 @@ def main():
 			min_y = int(min(min_y, vertices[j][1]))
 			max_x = int(max(max_x, vertices[j][0]))
 			max_y = int(max(max_y, vertices[j][1]))
-	#add some padding so text isn't so tight
-	min_x = max(0, min_x-10)
-	min_y = max(0, min_y-5)
-	max_y += 5
-	max_x += 10
 	img = img[min_y:max_y, min_x:max_x]
-	showImage(img)
+	return(img)
+
+def showImage(img):
+	cv2.imshow("img", img)
+	cv2.waitKey(0)
+
+def outImgName(img_name):
+	list_name = img_name.split(".")
+	return list_name[0] + "_cropped." + list_name[1]
+
+def main():
+	#store arguements
+	img_name = args.input
+	confThreshold = args.thr
+	nmsThreshold = args.nms
+	inpWidth = args.width
+	inpHeight = args.height
+	model = args.model
+
+	#load model
+	net = cv2.dnn.readNetFromTensorflow(model)
+
+	#read image
+	img = cv2.imread(img_name)
+
+	img = detectAndCropText(img, confThreshold, nmsThreshold, 
+							inpWidth, inpHeight, net)
 	img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 	_,img = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-	cv2.imwrite("asdf.jpg", img)
+	cv2.imwrite(outImgName(img_name), img)
 if __name__ == '__main__':
 	main()
